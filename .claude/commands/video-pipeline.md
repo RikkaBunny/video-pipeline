@@ -214,35 +214,53 @@ https://source-url
 **分类（概览区 H3，从7类选）：**
 `要闻` / `模型发布` / `开发生态` / `产品应用` / `技术与洞察` / `行业动态` / `前瞻与传闻`
 
-**A4.5 — 素材采集（Playwright + opengraph，混合策略）**
+**A4.5 — 素材采集（智能多策略，自动选最优）**
 
-为每条新闻采集最高质量的内嵌素材，遵循以下**素材评分规则**：
+为每条新闻采集最高质量、与内容匹配的素材。**使用 `/root/video-pipeline/pipeline/collect_media.py` 脚本自动执行**，严禁人工伪造素材。
 
-| 素材类型 | 分值 | 说明 |
+**素材评分规则：**
+
+| 素材类型 | 分值 | 示例 |
 |---------|------|------|
-| 视频（mp4/webm/YouTube embed） | **9分** | 最优，能直接用于视频帧 |
-| 动态图（GIF/APNG/Lottie） | **6分** | README 中的演示 GIF、动态预览 |
-| 截图/预览图（静态） | **3分** | Playwright 截图或 og:image |
+| 视频（mp4/YouTube） | **9分** | README 演示视频、YouTube 演示 |
+| 动态图（GIF） | **6分** | README 演示 GIF、操作演示 |
+| 高信息量截图/预览图 | **3分** | 文章 OG 封面、GitHub 预览图、Playwright 截图 |
 | 无素材 | **0分** | 省略 `![]()` 行 |
-| 素材虚假或内容不匹配 | **-10分** | 严禁使用 |
+| 虚假/不相关素材 | **-10分** | 严禁使用 |
 
-**采集优先级（每条新闻按序尝试，取最高分素材）：**
-1. 访问 GitHub repo 页，检查 README 中是否有演示 GIF → **6分**
-2. 检查 README 中是否嵌入了 YouTube/mp4 演示视频 → **9分**
-3. 用 Playwright 截取 repo 首页截图（含 README 预览） → **3分**
-4. 回退：使用 `https://opengraph.github.com/repo/{owner}/{repo}` 社交预览图 → **3分**
-5. 非 GitHub 内容（HN/博客）：Playwright 截图目标页面 → **3分**
+**采集命令（每条新闻执行一次）：**
+```bash
+python3 /root/video-pipeline/pipeline/collect_media.py \
+  --url <新闻来源URL> \
+  --out <output_dir>/media \
+  --num <N>
+# 返回 JSON: {"path": "...", "score": N, "desc": "...", "type": "gif|image|video"}
+```
 
-**自评分要求：**
-- 文章结尾汇总所有新闻的素材得分，格式：`素材评分：X/9, X/6, X/3 ... 总计 XX 分（满分 XX 分）`
-- 尽量争取高分，优先 GIF > 截图 > opengraph
-- 只记录真实获取的素材，严禁伪造 URL 或使用不相关图片
+**各内容类型策略（脚本自动按优先级尝试）：**
 
-**素材质量兜底规则（防止低分）：**
-- 采集完成后逐条检查 `media_score` 注释：
-  - 得 **0 分**（无素材）→ 强制补充 opengraph 图：`https://opengraph.github.com/repo/{owner}/{repo}`，补后得 3 分
-  - 得 **-10 分**（URL 失效/不匹配）→ 立即删除该素材行并替换为 Playwright 截图（3 分）
-- 目标：每条新闻素材分 **≥ 3 分**，全文素材总分 **≥ 新闻数 × 3**
+| 内容类型 | 优先策略 |
+|---------|---------|
+| **GitHub repo** | README GIF(6) → README YouTube/mp4 视频(9) → README 首图(3) → opengraph(3) |
+| **YouTube** | yt-dlp 下载最低画质视频(9) → 封面图(3) |
+| **Twitter/X** | Playwright 截图推文(3)（需调用 MCP playwright） |
+| **学术论文(arXiv)** | HTML版论文首图(3) → OG图(3) |
+| **文章/博客/HN** | OG封面图(3) → 首张内容图(3) → Playwright截图(3) |
+
+**Playwright 补充截图（脚本未能自动获取时）：**
+- 使用 `mcp__playwright__browser_navigate` + `mcp__playwright__browser_take_screenshot` 截图
+- 截图前滚动页面，确保显示有效内容（不是 loading 状态或空白）
+- 截图保存至 `<output_dir>/media/<N>_media_pw.png`
+
+**素材质量验证（必须执行，防止低分）：**
+1. 检查文件大小 ≥ 5KB（脚本已内置）
+2. 检查图片尺寸 ≥ 150×100px（脚本已内置）
+3. 人工判断：素材内容是否与当条新闻直接相关？若不相关 → 重新采集或换 Playwright 截图
+4. **严禁**使用与新闻无关的图片（哪怕质量高），宁可降级用 Playwright 截图
+
+**素材兜底规则：**
+- 每条新闻素材分 **≥ 3 分**（`collect_media.py` 失败时必须用 Playwright 截图补充）
+- 全文素材总分 **≥ 新闻数 × 3**
 
 **A4.8 — 内联自评分与质量门禁**
 
