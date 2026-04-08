@@ -1,0 +1,30 @@
+# 内容来源配置
+
+github:
+  trending_url: "https://github.com/trending?since=weekly"
+  hacker_news_rss: "https://news.ycombinator.com/rss"
+  limit: 10
+
+ai:
+  rss_feeds:
+    - url: "https://huggingface.co/blog/feed.xml"
+      name: "HuggingFace"
+      limit: 5
+    - url: "https://venturebeat.com/category/ai/feed/"
+      name: "VentureBeat AI"
+      limit: 5
+    - url: "https://arxiv.org/rss/cs.AI"
+      name: "arxiv cs.AI"
+      limit: 5
+
+daily:
+  rss_feeds:
+    - url: "https://36kr.com/feed"
+      name: "36氪"
+      limit: 5
+    - url: "https://sspai.com/feed"
+      name: "少数派"
+      limit: 5
+    - url: "https://news.ycombinator.com/rss"
+      name: "Hacker News"
+      limit: 5

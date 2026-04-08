@@ -1,0 +1,32 @@
+# 视频流水线配置
+
+video:
+  resolution: "1920x1080"
+  fps: 30
+  codec: libx264
+  audio_codec: aac
+  crf: 23
+
+tts:
+  voice_female: "zh-CN-XiaoxiaoNeural"
+  voice_male: "zh-CN-YunxiNeural"
+  rate: "+5%"
+  volume: "+0%"
+
+cover:
+  width: 1920
+  height: 1080
+  gradient_start: [30, 30, 60]   # 深蓝
+  gradient_end: [80, 40, 120]    # 深紫
+  font_size_episode: 180
+  font_size_title: 72
+
+bilibili:
+  tid: 231          # 科技分区
+  tags: "AI,科技,GitHub,开源,热点"
+  source: ""
+
+output_dir: "/root/video-pipeline/output"
+log_dir: "/root/video-pipeline/logs"
+db_path: "/root/video-pipeline/pipeline/dedup.db"
+font_path: "/root/video-pipeline/assets/fonts/NotoSansSC-Regular.ttf"
