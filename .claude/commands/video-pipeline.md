@@ -325,7 +325,7 @@ python3 /root/video-pipeline/pipeline/collect_media.py \
 **C1 — 读取并验证图文文章**
 - 解析 frontmatter（title, type, episode, date, channel_color, tab_label）
 - 提取每条新闻：H2标题、blockquote摘要（口播正文）、5个要点卡片、media 图片（最多2张）
-- 动态提取 Tab 栏标签（从概览区 H3 分类 + Intro/Outro 固定项）
+- 动态提取 Tab 栏标签（从概览区 H3 分类 + 开场/结尾 固定项）
 
 **C2 — TTS 配音 + ASS 字幕**
 - edge-tts 声音：`zh-CN-YunxiNeural`（明明），rate=+5%
@@ -344,7 +344,7 @@ python3 /root/video-pipeline/pipeline/collect_media.py \
 **背景**：深色 `#0A0A14`
 
 **顶部动态 Tab 栏（高52px）**：
-- 标签从文章分类动态提取，固定含 Intro / Outro
+- 标签从文章分类动态提取，固定含 开场 / 结尾
 - 激活标签：青色 `#0DCFB4` 背景 + 白字，非激活：深灰底
 - 字号 26px
 
@@ -357,7 +357,7 @@ python3 /root/video-pipeline/pipeline/collect_media.py \
 - 卡片内：emoji 图标(52px, NotoColorEmoji) + 标题(28px, 频道主色) + 正文(26px, 灰色, 行高34px)
 - Emoji 单独用 NotoColorEmoji.ttf @ 109px 渲染后缩小，确保彩色显示
 
-**开场 Slide**：同心圆渐变背景 + 日期标题 + 分类卡片
+**开场 Slide**：同心圆渐变背景 + 日期标题 + 分类卡片（与正片相同的 draw_card 样式）
 
 **结尾 Slide**：居中 `感谢收听 · 明日见`，72px
 

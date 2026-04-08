@@ -184,7 +184,7 @@ def parse(path):
             'media_raws': media_raws,
         })
     news.sort(key=lambda x: x['num'])
-    tabs = ['Intro'] + cat_order + ['Outro']
+    tabs = ['开场'] + cat_order + ['结尾']
     return {
         'date': date_str, 'title': title_fm, 'show_name': show_name,
         'cat_order': cat_order, 'cat_items': cat_items,
@@ -475,7 +475,11 @@ def resolve_media(raw, num):
             print(f"    ⚠️  下载失败 {raw[:60]}: {e}")
             return None
     p = Path(raw)
-    return str(p) if p.exists() else None
+    if p.exists():
+        return str(p)
+    # Try resolving relative to article's output directory
+    p2 = OUT_DIR / raw
+    return str(p2) if p2.exists() else None
 
 def media_type(path):
     ext = Path(path).suffix.lower()
@@ -678,9 +682,12 @@ def make_gif_overlay_seg(slide, audio, dur, out, media_path, ass=None):
 
 # ── Slide generators ───────────────────────────────────────────────────────────
 CAT_ICONS = {
-    '开发生态': '</>', '模型发布': '✦', '模型与工具': 'AI',
-    '行业动态': '↗',  '前瞻与传闻': '◎', '要闻': '★',
-    '技术与洞察': '∞', '产品应用': '▶',
+    '开发生态': '⚙️', '模型发布': '🤖', '模型与工具': '🔧',
+    '行业动态': '📈', '前瞻与传闻': '🔮', '要闻': '📰',
+    '技术与洞察': '💡', '产品应用': '🚀', '开发工具': '🛠️',
+    'Claude Code 生态': '💻', '智能体框架': '🧠', '开源社区': '🌐',
+    '安全与隐私': '🔒', '硬件与芯片': '🖥️', '创业融资': '💰',
+    '政策监管': '⚖️',
 }
 
 def make_intro_slide(data):
@@ -690,41 +697,36 @@ def make_intro_slide(data):
         ratio = r / 350
         col   = (int(10 + 68*(1-ratio)), int(10+195*(1-ratio)), int(20+176*(1-ratio)))
         d.ellipse([W//2-r, H//2-r-80, W//2+r, H//2+r-80], fill=col)
-    draw_tab_bar(d, data['tabs'], 'Intro')
-    d.text((W//2, 160), f"{data['date']}  资讯概览", font=f(60), fill=WHITE, anchor='mm')
-
+    draw_tab_bar(d, data['tabs'], '开场')
+    # Title bar — same style as news slides
+    d.rectangle([0, TAB_H, W, TAB_H + TITLE_H], fill=BG2)
+    d.line([0, TAB_H + TITLE_H - 1, W, TAB_H + TITLE_H - 1], fill=(40, 40, 65), width=1)
+    d.text((60, TAB_H + TITLE_H // 2), f"{data['date']}  资讯概览",
+           font=f(50), fill=TEAL, anchor='lm')
+    # Build category cards using same draw_card style
     cats = data['cat_order']
-    n    = len(cats); bm = 80; bg = 40; by = 250
-    bh   = H - by - 60
-    cat_c = [TEAL, PURPLE, AMBER, ROSE]
-
-    def _cat_box(x, y, w, h, cat, col):
-        d.rounded_rectangle([x,y,x+w,y+h], radius=18, fill=(20,20,38), outline=(*col,80), width=2)
-        hdr_h = 58
-        d.rounded_rectangle([x,y,x+w,y+hdr_h], radius=18, fill=col)
-        d.rectangle([x,y+hdr_h//2,x+w,y+hdr_h], fill=col)
-        icon = CAT_ICONS.get(cat, '●')
-        d.text((x+w//2, y+hdr_h//2), f"{icon}  {cat}", font=f(28), fill=(10,10,20), anchor='mm')
-        items = data['cat_items'].get(cat, [])
-        iy = y + hdr_h + 20
-        for it in items[:6]:
-            if iy + 36 > y + h - 8: break
-            d.ellipse([x+20, iy+10, x+33, iy+23], fill=col)
-            d.text((x+46, iy+4), fit_text(d, it, f(22), w-60), font=f(22), fill=MUTED)
-            iy += 38
-
-    if n == 1:
-        _cat_box(bm, by, W-bm*2, bh, cats[0], cat_c[0])
-    elif n == 2:
-        bw = (W-bm*2-bg)//2
-        _cat_box(bm, by, bw, bh, cats[0], cat_c[0])
-        _cat_box(bm+bw+bg, by, bw, bh, cats[1], cat_c[1])
+    n    = len(cats)
+    avail_h = CONTENT_H - PAD * 2
+    avail_w = W - PAD * 2
+    # Layout: ≤3 cats → single row; 4+ → 2 rows of roughly equal size
+    if n <= 3:
+        rows = [cats]
     else:
-        bw2 = (W-bm*2-bg)//2; bh1 = int(bh*0.50); bh2 = bh-bh1-bg
-        _cat_box(bm,        by,        bw2,    bh1, cats[0], cat_c[0])
-        _cat_box(bm+bw2+bg, by,        bw2,    bh1, cats[1], cat_c[1])
-        _cat_box(bm,        by+bh1+bg, W-bm*2, bh2, cats[2], cat_c[2])
-
+        mid  = (n + 1) // 2
+        rows = [cats[:mid], cats[mid:]]
+    n_rows  = len(rows)
+    card_h  = (avail_h - CARD_GAP * (n_rows - 1)) // n_rows
+    for ri, row in enumerate(rows):
+        y      = CONTENT_Y + PAD + ri * (card_h + CARD_GAP)
+        n_cols = len(row)
+        card_w = (avail_w - CARD_GAP * (n_cols - 1)) // n_cols
+        for ci, cat in enumerate(row):
+            x     = PAD + ci * (card_w + CARD_GAP)
+            items = data['cat_items'].get(cat, [])
+            body  = '  ·  '.join(fit_text(d, it, f(26), card_w - 90) for it in items[:5])
+            icon  = CAT_ICONS.get(cat, '📌')
+            accent = CARD_ACCENTS[(ri * 3 + ci) % len(CARD_ACCENTS)]
+            draw_card(img, d, x, y, card_w, card_h, icon, cat, body, accent)
     p = BUILD/"slides"/"00_intro.png"; img.save(str(p)); return str(p)
 
 def make_news_slide(item, data):
@@ -739,7 +741,7 @@ def make_news_slide(item, data):
 def make_outro_slide(data):
     img = Image.new('RGB', (W, H), BG)
     d   = ImageDraw.Draw(img)
-    draw_tab_bar(d, data['tabs'], 'Outro')
+    draw_tab_bar(d, data['tabs'], '结尾')
     for r in range(280, 0, -20):
         ratio = r/280
         col   = (int(10+129*(1-ratio)), 10, int(20+226*(1-ratio)))
