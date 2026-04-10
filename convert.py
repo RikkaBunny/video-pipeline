@@ -165,7 +165,7 @@ def parse(path):
         parts = [ln[2:] for ln in sec.splitlines() if ln.startswith('> ')]
         summary = strip_md(' '.join(parts))
         cards = []
-        for m3 in re.finditer(r'^[-•]\s+(\S+)\s+\*\*([^*]+)\*\*[：:]\s+(.+)',
+        for m3 in re.finditer(r'^-\s+(.+?)\s+\*\*(.+?)\*\*[：:]\s*(.+)$',
                                sec, re.MULTILINE):
             cards.append({
                 'emoji': m3.group(1),

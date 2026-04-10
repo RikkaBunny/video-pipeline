@@ -167,7 +167,7 @@ def parse(path):
         parts = [ln[2:] for ln in sec.splitlines() if ln.startswith('> ')]
         summary = strip_md(' '.join(parts))
         cards = []
-        for m3 in re.finditer(r'^[-•]\s+(\S+)\s+\*\*([^*]+)\*\*[：:]\s+(.+)', sec, re.MULTILINE):
+        for m3 in re.finditer(r'^-\s+(.+?)\s+\*\*(.+?)\*\*[：:]\s*(.+)$', sec, re.MULTILINE):
             cards.append({'emoji': m3.group(1), 'title': m3.group(2), 'body': strip_md(m3.group(3))})
         media_raws = [m.strip() for m in re.findall(r'!\[[^\]]*\]\(([^)]+)\)', sec)][:2]
         news.append({'num': num, 'title': title, 'summary': summary,
