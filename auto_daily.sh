@@ -39,7 +39,9 @@ mkdir -p "$FULL_OUT/media"
 echo ""
 echo "[STEP 1/4] 生成图文文章..."
 
-claude -p "在 /root/video-pipeline 目录下，为 $TYPE 类型生成今日($DATE)的AI早报图文文章。
+# 写入 prompt 文件（避免 shell 转义问题）
+cat > /tmp/vp_prompt.txt << PROMPT_EOF
+在 /root/video-pipeline 目录下，为 $TYPE 类型生成今日($DATE)的早报图文文章。
 
 具体步骤：
 1. 用Python feedparser抓取 config/sources.yaml 中 $TYPE 的RSS源，获取最近7天的新闻(每个源最多5条)
@@ -49,14 +51,16 @@ claude -p "在 /root/video-pipeline 目录下，为 $TYPE 类型生成今日($DA
    - YAML frontmatter: title(关键事件;关键事件【早报 $DATE】), type=$TYPE, date=$DATE
    - H1日期标题, H2概览(2-4分类), 每条H2新闻(blockquote摘要80-170字+正文+来源URL代码块+恰好5个emoji要点卡片)
    - 结尾: 提示：内容由AI辅助创作，可能存在幻觉和错误。 和 作者Bunny，视频版在同名哔哩哔哩。欢迎点赞、关注、分享。
-   - 零禁用词(惊艳/颠覆/革命性/史诗级/遥遥领先), 正文首句来源归因, 产品名\`code\`, 公司名**加粗**
+   - 正文首句来源归因, 产品名用code格式, 公司名加粗
 5. 为每条新闻运行: python3 pipeline/collect_media.py --url <URL> --out $FULL_OUT/media --num <N>
-6. 在article.md对应位置插入 ![](media/NN_media_og.png) 和 <!-- media_score: 3 -->
+6. 在article.md对应位置插入媒体引用和media_score注释
 7. 将URL注册到 pipeline/dedup.db (type=$TYPE)
 
-不要询问确认，直接执行所有步骤。" \
-    --max-turns 40 \
-    2>&1 | tee /tmp/vp_article_out.txt
+不要询问确认，直接执行所有步骤。
+PROMPT_EOF
+
+# 用 script 命令模拟 pseudo-terminal（解决 cron 无终端问题）
+script -qec "claude -p \"\$(cat /tmp/vp_prompt.txt)\" --max-turns 40" /tmp/vp_article_out.txt </dev/null
 
 # 查找生成的 article.md
 ARTICLE_PATH="$FULL_OUT/article.md"
