@@ -6,3 +6,8 @@ __pycache__/
 *.pyo
 .env
 /tmp/
+
+cookies.json
+download.log
+ds_update.log
+qrcode.png
