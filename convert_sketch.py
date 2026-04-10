@@ -217,11 +217,11 @@ def media_type(path):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 SKETCH_COLORS = [
-    ('#FF6B35', '#FFF0E8'),   # 卡通橙
-    ('#0EA5E9', '#E0F4FF'),   # 卡通蓝
-    ('#22C55E', '#E0FBE8'),   # 卡通绿
-    ('#A855F7', '#F3E8FF'),   # 卡通紫
-    ('#F43F5E', '#FFE4E9'),   # 卡通红
+    ('#C17F6E', '#F5EBE7'),   # 莫兰迪赭红
+    ('#7B9EA8', '#E8F0F2'),   # 莫兰迪雾蓝
+    ('#8FA87B', '#EAF0E6'),   # 莫兰迪灰绿
+    ('#9B89A8', '#EDE8F0'),   # 莫兰迪灰紫
+    ('#C4956A', '#F3ECE4'),   # 莫兰迪焦糖
 ]
 
 CARTOON_SPARKS = ['star', 'circle', 'diamond', 'heart', 'triangle']
@@ -313,19 +313,19 @@ def _wavy_underline(x1, y, width):
         segs.append(f'Q{x + period/2:.0f},{cy:.0f} {nx:.0f},{y}')
         x = nx
     d = f'M{x1},{y} ' + ' '.join(segs)
-    return f'<path d="{d}" fill="none" stroke="#f5a623" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>'
+    return f'<path d="{d}" fill="none" stroke="#B8907A" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>'
 
 def _tab_bar_svg(tabs, active, y=0, height=52):
     """顶部动态 Tab 栏 SVG（与 NotebookLM 版对齐）。"""
     tab_w  = W // max(len(tabs), 1)
     parts  = []
     # 背景条
-    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{height}" fill="#f0ede4"/>')
+    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{height}" fill="#EAE4DD"/>')
     for i, tab in enumerate(tabs):
         tx  = i * tab_w
         is_a = (tab == active)
-        bg  = '#fff9f0' if is_a else '#e8e5dc'
-        bdr = '#d4956a' if is_a else '#c8c4bb'
+        bg  = '#F0EBE4' if is_a else '#E0DBD4'
+        bdr = '#B8907A' if is_a else '#C5BFB6'
         parts.append(
             f'<rect x="{tx}" y="{y}" width="{tab_w}" height="{height}" '
             f'fill="{bg}" stroke="{bdr}" stroke-width="{2 if is_a else 1}"/>')
@@ -339,11 +339,11 @@ def _tab_bar_svg(tabs, active, y=0, height=52):
         if is_a:
             parts.append(
                 f'<rect x="{tx+4}" y="{y+height-4}" width="{tab_w-8}" height="4" '
-                f'fill="#d4956a" rx="2"/>')
+                f'fill="#B8907A" rx="2"/>')
         if i:
             parts.append(
                 f'<line x1="{tx}" y1="{y+4}" x2="{tx}" y2="{y+height-4}" '
-                f'stroke="#c8c4bb" stroke-width="1"/>')
+                f'stroke="#C5BFB6" stroke-width="1"/>')
     return '\n'.join(parts)
 
 def _spark_svg(shape, x, y, color, size=14, anim=''):
@@ -393,7 +393,7 @@ def _card_svg(idx, emoji, title, body, x, y, card_w, card_h, delay=0.0):
     # 卡片主体（大圆角，细边框）
     parts.append(
         f'<rect x="{x}" y="{y}" width="{card_w}" height="{card_h}" rx="{r}" '
-        f'fill="white" stroke="#e0ddd4" stroke-width="2" '
+        f'fill="white" stroke="#D5CFC6" stroke-width="2" '
         f'filter="url(#rough)" style="{anim}"/>')
     # 彩色顶条（更厚，与大圆角匹配）
     parts.append(
@@ -432,7 +432,7 @@ def _card_svg(idx, emoji, title, body, x, y, card_w, card_h, delay=0.0):
     for li, ln in enumerate(body_lines[:max_body_lines]):
         parts.append(
             f'<text x="{x+body_pad_x}" y="{body_start_y+li*body_lh}" '
-            f'font-size="{body_fsz}" fill="#1a1a1a" font-weight="bold" '
+            f'font-size="{body_fsz}" fill="#4A4440" font-weight="bold" '
             f'font-family={BASE_FONT!r} style="{anim}">{esc(ln)}</text>')
     # 右上角装饰（SVG图形，确保渲染）
     parts.append(_spark_svg(spark, x + card_w - 26, y + 28, accent, size=11, anim=anim))
@@ -452,7 +452,7 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
     css = f"""
     {FONT_FACE}
     * {{ margin:0; padding:0; box-sizing:border-box; }}
-    body {{ width:{W}px; height:{H}px; overflow:hidden; background:#fffef9; }}
+    body {{ width:{W}px; height:{H}px; overflow:hidden; background:#F5F0EB; }}
     @keyframes fadeUp {{
         from {{ opacity:0; transform:translateY(10px); }}
         to   {{ opacity:1; transform:translateY(0); }}
@@ -529,7 +529,7 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
         title_svg_parts.append(
             f'<text x="{margin}" y="{title_y0 + li * title_lh}" '
             f'font-size="{best_sz}" font-weight="bold" dominant-baseline="middle" '
-            f'fill="#E8550F" font-family={BASE_FONT!r} '
+            f'fill="#B0735E" font-family={BASE_FONT!r} '
             f'style="animation:fadeUp .6s ease .12s both;opacity:0">'
             f'{esc(ln)}</text>')
     title_svg = '\n'.join(title_svg_parts)
@@ -538,9 +538,9 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
 
     # ── 标题背景条 ──
     title_bar_svg = (
-        f'<rect x="0" y="{tab_h}" width="{W}" height="{title_h}" fill="#faf8f2"/>'
+        f'<rect x="0" y="{tab_h}" width="{W}" height="{title_h}" fill="#F0EBE4"/>'
         f'<line x1="0" y1="{tab_h + title_h - 1}" x2="{W}" y2="{tab_h + title_h - 1}" '
-        f'stroke="#e0ddd4" stroke-width="1"/>')
+        f'stroke="#D5CFC6" stroke-width="1"/>')
 
     # ── 粗边框面板（draw 动画）──
     pad = 18
@@ -548,7 +548,7 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
     bw, bh = W - pad * 2, H - by - pad
     border_svg = (
         f'<rect x="{bx}" y="{by}" width="{bw}" height="{bh}" rx="16" '
-        f'fill="rgba(255,253,248,0.92)" stroke="#1a1a1a" stroke-width="3.5" '
+        f'fill="rgba(245,240,235,0.92)" stroke="#8A8078" stroke-width="3.5" '
         f'stroke-dasharray="4000" '
         f'style="animation:borderDraw 1.2s ease .05s both" '
         f'filter="url(#rough)"/>')
@@ -561,7 +561,7 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 {W} {H}" width="{W}" height="{H}"
-     style="background:#fffef9;font-family:{BASE_FONT}">
+     style="background:#F5F0EB;font-family:{BASE_FONT}">
   <defs>
     <style>{css}</style>
     <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
@@ -570,7 +570,7 @@ def _build_svg(title, tab_active, cards, extra='', all_tabs=None):
           xChannelSelector="R" yChannelSelector="G"/>
     </filter>
     <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="12" cy="12" r="1.4" fill="rgba(180,160,120,0.18)"/>
+      <circle cx="12" cy="12" r="1.4" fill="rgba(160,148,130,0.15)"/>
     </pattern>
   </defs>
 
@@ -621,11 +621,11 @@ def make_svg_intro_slide(data):
     title_h  = 108
     content_y = tab_h + title_h
     title_bar = (
-        f'<rect x="0" y="{tab_h}" width="{W}" height="{title_h}" fill="#faf8f2"/>'
+        f'<rect x="0" y="{tab_h}" width="{W}" height="{title_h}" fill="#F0EBE4"/>'
         f'<line x1="0" y1="{content_y-1}" x2="{W}" y2="{content_y-1}" '
-        f'stroke="#e0ddd4" stroke-width="1"/>'
+        f'stroke="#D5CFC6" stroke-width="1"/>'
         f'<text x="60" y="{tab_h + title_h//2 + 6}" font-size="50" font-weight="bold" '
-        f'fill="#1a1a1a" font-family={BASE_FONT!r} dominant-baseline="middle" '
+        f'fill="#4A4440" font-family={BASE_FONT!r} dominant-baseline="middle" '
         f'style="animation:fadeUp .6s ease .1s both;opacity:0">'
         f'{esc(date_str)}  资讯概览</text>')
 
@@ -637,7 +637,7 @@ def make_svg_intro_slide(data):
     # 同心圆装饰
     circles = '\n'.join([
         f'<circle cx="{cx}" cy="{cy}" r="{150 + i*40}" '
-        f'fill="none" stroke="rgba(180,140,80,{0.18-i*0.04:.2f})" stroke-width="{3-i*0.5:.1f}" '
+        f'fill="none" stroke="rgba(165,145,120,{0.18-i*0.04:.2f})" stroke-width="{3-i*0.5:.1f}" '
         f'stroke-dasharray="1200" '
         f'style="animation:drawCircle {1.2+i*0.3:.1f}s ease {0.2+i*0.2:.1f}s both"/>'
         for i in range(4)])
@@ -645,7 +645,7 @@ def make_svg_intro_slide(data):
     # 中心标题
     main_title = (
         f'<text x="{cx}" y="{cy-20}" text-anchor="middle" font-size="64" font-weight="bold" '
-        f'fill="#1a1a1a" font-family={BASE_FONT!r} filter="url(#rough)" '
+        f'fill="#4A4440" font-family={BASE_FONT!r} filter="url(#rough)" '
         f'style="animation:fadeUp .7s ease .5s both;opacity:0">{esc(show_name)}</text>')
     sub1 = (
         f'<text x="{cx}" y="{cy+40}" text-anchor="middle" font-size="28" fill="#666" '
@@ -682,7 +682,7 @@ def make_svg_intro_slide(data):
 
     return f"""<svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 {W} {H}" width="{W}" height="{H}"
-     style="background:#fffef9">
+     style="background:#F5F0EB">
   <defs>
     <style>{css_extra}
     {FONT_FACE}
@@ -695,7 +695,7 @@ def make_svg_intro_slide(data):
           xChannelSelector="R" yChannelSelector="G"/>
     </filter>
     <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="12" cy="12" r="1.4" fill="rgba(180,160,120,0.18)"/>
+      <circle cx="12" cy="12" r="1.4" fill="rgba(160,148,130,0.15)"/>
     </pattern>
   </defs>
   <rect width="{W}" height="{H}" fill="url(#dots)"/>
@@ -715,14 +715,14 @@ def make_svg_outro_slide(data):
 
     circles = '\n'.join([
         f'<circle cx="{cx}" cy="{cy}" r="{120 + i*40}" '
-        f'fill="none" stroke="rgba(180,140,80,{0.2-i*0.05:.2f})" stroke-width="2.5" '
+        f'fill="none" stroke="rgba(165,145,120,{0.2-i*0.05:.2f})" stroke-width="2.5" '
         f'stroke-dasharray="1200" '
         f'style="animation:drawCircle 1.4s ease {0.1+i*0.2:.1f}s both"/>'
         for i in range(4)])
 
     main_text = (
         f'<text x="{cx}" y="{cy-10}" text-anchor="middle" font-size="72" '
-        f'font-weight="bold" fill="#1a1a1a" font-family={BASE_FONT!r} '
+        f'font-weight="bold" fill="#4A4440" font-family={BASE_FONT!r} '
         f'filter="url(#rough)" '
         f'style="animation:fadeUp .7s ease .4s both;opacity:0">感谢收听 · 明日见</text>')
     sub = (
@@ -739,7 +739,7 @@ def make_svg_outro_slide(data):
 
     return f"""<svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 {W} {H}" width="{W}" height="{H}"
-     style="background:#fffef9">
+     style="background:#F5F0EB">
   <defs>
     <style>
     {FONT_FACE}
@@ -752,7 +752,7 @@ def make_svg_outro_slide(data):
           xChannelSelector="R" yChannelSelector="G"/>
     </filter>
     <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="12" cy="12" r="1.4" fill="rgba(180,160,120,0.18)"/>
+      <circle cx="12" cy="12" r="1.4" fill="rgba(160,148,130,0.15)"/>
     </pattern>
   </defs>
   <rect width="{W}" height="{H}" fill="url(#dots)"/>
@@ -786,7 +786,7 @@ async def svg_to_mp4(slide_content, out_mp4, duration):
         html = f"""<!DOCTYPE html>
 <html><head><style>
   *{{margin:0;padding:0;}}
-  body{{width:{W}px;height:{H}px;overflow:hidden;background:#fffef9;}}
+  body{{width:{W}px;height:{H}px;overflow:hidden;background:#F5F0EB;}}
 </style></head><body>{slide_content}</body></html>"""
     Path(html_path).write_text(html, encoding='utf-8')
 
