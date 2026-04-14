@@ -1,22 +1,73 @@
 # 内容来源配置
 
+# ── Twitter/X 通用信息源（所有类型都会抓，按类型筛选账号）─────────────────────
+twitter:
+  script: "/root/video-pipeline/pipeline/twitter_scraper.py"
+  cookies: "/root/video-pipeline/x_cookies.json"
+
+  # github 类：开发者 / 开源社区动态
+  github_accounts:
+    - karpathy        # AI/ML 工程教育，信号极强
+    - simonw          # Simon Willison，开源工具作者
+    - github          # GitHub 官方
+    - _akhaliq        # 每日论文+项目聚合
+
+  # ai 类：模型发布 / 研究动态 / 行业新闻
+  ai_accounts:
+    - OpenAI          # GPT 系列官方
+    - AnthropicAI     # Claude 系列官方
+    - GoogleDeepMind  # Gemini / DeepMind 研究
+    - huggingface     # 开源模型生态
+    - _akhaliq        # 论文聚合，每日必看
+    - karpathy        # 深度 AI 解读
+    - ethanmollick    # 沃顿教授，AI 实用案例
+    - sama            # Sam Altman，OpenAI 战略
+    - ylecun          # Yann LeCun，争议性观点
+    - NathanLambert8  # RLHF / 后训练研究
+
+  # daily 类：科技快讯 / 产品 / 行业
+  daily_accounts:
+    - _akhaliq        # 每日技术动态
+    - karpathy        # 深度洞察
+    - ethanmollick    # AI 应用趋势
+    - OpenAI          # 产品发布
+    - AnthropicAI     # 产品发布
+    - sama            # 行业观点
+
+  limit_per_account: 2   # 每个账号取最新原创推文数
+
+# ── GitHub ───────────────────────────────────────────────────────────────────
 github:
   trending_url: "https://github.com/trending?since=weekly"
   hacker_news_rss: "https://news.ycombinator.com/rss"
   limit: 10
 
+# ── AI 资讯 RSS ───────────────────────────────────────────────────────────────
 ai:
   rss_feeds:
+    - url: "https://techcrunch.com/category/artificial-intelligence/feed"
+      name: "TechCrunch AI"
+      limit: 5
+    - url: "https://www.technologyreview.com/topic/artificial-intelligence/feed"
+      name: "MIT Technology Review"
+      limit: 3
+    - url: "https://openai.com/news/rss.xml"
+      name: "OpenAI Blog"
+      limit: 3
+    - url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+      name: "The Verge AI"
+      limit: 3
     - url: "https://huggingface.co/blog/feed.xml"
-      name: "HuggingFace"
-      limit: 5
-    - url: "https://venturebeat.com/category/ai/feed/"
-      name: "VentureBeat AI"
-      limit: 5
+      name: "HuggingFace Blog"
+      limit: 3
     - url: "https://arxiv.org/rss/cs.AI"
       name: "arxiv cs.AI"
-      limit: 5
+      limit: 3
+    - url: "https://simonwillison.net/atom/everything/"
+      name: "Simon Willison"
+      limit: 3
 
+# ── 科技日报 RSS ──────────────────────────────────────────────────────────────
 daily:
   rss_feeds:
     - url: "https://36kr.com/feed"

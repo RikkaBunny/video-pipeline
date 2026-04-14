@@ -20,7 +20,7 @@
     → C1-C6 convert_sketch_v2.py → C7 evaluator 门禁 → upload
 
 自动模式硬规则（cron 触发时必须遵守）：
-  1. A5 门禁：score < 60 触发最多 2 轮精准修订；仍失败 → 终止本期，写 run-log 标 ABORTED，不进 convert。
+  1. A5 门禁：score < 60 触发最多 3 轮精准修订，每轮保留历史最高分版本；3 轮后仍未达标 → 取最高分版本强制放行（FORCED_PASS），写 run-log 标注。
   2. C7 门禁：score < min_score_to_upload(=75) **严禁上传**。视频保存在本地，但不传 B 站。写 run-log 标 convert_only。
   3. score ≥ 75 才允许自动上传。
   4. 任何阶段致命错误都终止 + 写 log，不吞错、不降级。

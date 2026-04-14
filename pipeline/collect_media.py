@@ -17,35 +17,48 @@ collect_media.py — 智能媒体素材采集器
 """
 
 import re, sys, os, json, subprocess, argparse, hashlib, time
-import urllib.request, urllib.parse
+import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # ── HTTP 工具 ─────────────────────────────────────────────────────────────────
 
-def http_get(url, timeout=15, headers=None):
+def http_get(url, timeout=15, headers=None, max_retries=3):
     h = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
          "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
     if headers:
         h.update(headers)
-    try:
-        req = urllib.request.Request(url, headers=h)
-        # urllib 默认跟随重定向
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read()
-    except Exception:
-        return None
+    req = urllib.request.Request(url, headers=h)
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            # 4xx 客户端错误不重试
+            if 400 <= e.code < 500:
+                return None
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+        except (urllib.error.URLError, OSError):
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+        except Exception:
+            return None
+    return None
 
-def download_to(url, path, min_bytes=5000, timeout=20):
-    """下载文件到 path，返回 True/False，并验证大小。"""
-    data = http_get(url, timeout=timeout)
-    if not data or len(data) < min_bytes:
-        return False
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(data)
-    return True
+def download_to(url, path, min_bytes=5000, timeout=20, max_retries=3):
+    """下载文件到 path，返回 True/False，并验证大小。带指数退避重试。"""
+    for attempt in range(max_retries):
+        data = http_get(url, timeout=timeout, max_retries=1)
+        if data and len(data) >= min_bytes:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+            return True
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)
+    return False
 
 def fetch_html(url):
     data = http_get(url)

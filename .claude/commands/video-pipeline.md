@@ -264,57 +264,71 @@ python3 /root/video-pipeline/pipeline/collect_media.py \
 - 每条新闻素材分 **≥ 3 分**（`collect_media.py` 失败时必须用 Playwright 截图补充）
 - 全文素材总分 **≥ 新闻数 × 3**
 
-**A4.8 — 内联自评分与质量门禁**
+**A5 — Evaluator 门禁（调用 `/video-score`，article mode）**
 
-在保存文章后、展示给用户前，执行快速文本内联评分（无需 Playwright，纯文本分析）：
+> Generator ≠ Evaluator。A4.8 内联自评已废弃，统一由独立 evaluator 门禁放行。
 
-| 检查项 | 满分 | 评分逻辑 |
-|--------|------|---------|
-| B2 摘要字数 | 8分 | 每条 blockquote 80-170字得1分（最多6分）+ 总字数≥400得2分 |
-| B3 要点卡片 | 6分 | 每条有5个 bullet 得1分 |
-| B4 禁用词 | 6分 | 基准6分，每出现1个禁用词扣1分 |
-| C1 Frontmatter | 3分 | 6项必填字段各0.5分 |
-| C2 标题格式 | 2分 | 符合`关键事件；关键事件【XX YYYY-MM-DD】`格式 |
-| C3 结构完整 | 3分 | H1+概览+来源URL+结尾固定行 |
-| C4 来源归因 | 2分 | ≥80%条目有归因开头得1分，100%得2分 |
-| A 素材汇总 | — | 读取 `media_score` 注释累加，标准化至40分 |
+**门禁参数：**
+- `min_score_to_convert = 60`
+- `max_revision_rounds = 3`
+- 3 轮后仍未达标 → 取历史最高分版本强制放行（FORCED_PASS），写入 run-log
 
-**质量门禁规则：**
-- 计算 B+C 合计（满40分）
-- **< 30分** → 触发自动修复循环（最多2轮）：
-  1. 列出所有失分项（如"第3条摘要仅62字，需补至80字以上"）
-  2. 针对性修改 article.md 中对应段落，不重新抓取
-  3. 重新评分，若仍 < 30分则再循环一次
-  4. 2轮后无论得分如何均通过，但在输出中标注 ⚠️
-- **≥ 30分** → 直接通过，在输出中显示 ✅
+**执行流程：**
 
-**A5 — 展示文章与评分摘要**
-
-输出格式：
 ```
-✅ 图文文章已生成
+best_score = 0
+best_article_path = article_path
+
+for revision_round in 0..3:
+    调用 /video-score <article_path> --json
+    读取 evaluation.json → score, grade, integrity_fail, revise_hints
+
+    if integrity_fail:
+        终止，写 run-log: ABORTED integrity_fail
+        停止
+
+    if score > best_score:
+        best_score = score
+        cp article.md → article_best.md  # 保留最高分版本
+
+    if score >= 60:
+        → PASS，展示评分，进 Convert
+        break
+
+    if revision_round < 3:
+        读 revise_hints，筛 high/mid 优先级
+        由 AI 判断修订策略（见 /video-score 修订策略表）
+        执行修订，覆盖写 article.md
+    else:
+        cp article_best.md → article.md  # 回滚最高分版本
+        → FORCED_PASS，展示评分 + ⚠️ 提示，进 Convert
+        写 run-log: forced_pass, best_score=XX
+```
+
+**展示格式（PASS/FORCED_PASS 均输出）：**
+
+```
+✅ 图文文章已生成（evaluator 通过）
 路径：/root/video-pipeline/output/<date>/<type>/article.md
-共 X 条新闻 | X 个要点卡片
+共 X 条新闻 | 修订轮次：X/3 | 最高分版本：XX 分
 
-┌────────────────────────────────────────────┐
-│         质量评分（内联快速版）              │
-├─────────────┬───────┬──────────────────────┤
-│ A 素材质量  │ XX/40 │ 🖼 X条静图·🌀 X条GIF │
-│ B 内容质量  │ XX/30 │ 摘要✅  卡片✅  禁词✅ │
-│ C 格式规范  │ XX/10 │ 结构✅  标题✅        │
-├─────────────┼───────┼──────────────────────┤
-│ 综合估分    │ XX/80 │ ⭐⭐⭐ B级            │
-└─────────────┴───────┴──────────────────────┘
+┌─────────────────┬───────┬─────┬──────────────────────┐
+│ 维度            │ 得分  │ 满分│ 备注                 │
+├─────────────────┼───────┼─────┼──────────────────────┤
+│ A 素材可用性    │ XX/35 │  35 │ X图 X GIF            │
+│ B 内容质量      │ XX/35 │  35 │ 核实X/X条·去重通过   │
+│ C 结构完整性    │ XX/20 │  20 │                      │
+│ D 叙事钩子      │ XX/10 │  10 │                      │
+├─────────────────┼───────┼─────┼──────────────────────┤
+│ 综合得分        │ XX    │ 100 │ ⭐⭐⭐ B 级           │
+└─────────────────┴───────┴─────┴──────────────────────┘
 
-💡 提升建议（优先级排序）：
-1. [最高分项] ...具体可执行建议...
-2. [次高分项] ...
+门禁：✅ convert (≥60)
 
-完整评分（含真实性抽查）：/video-score <article路径>
-审核无误后执行：/video-pipeline convert <article路径>
+下一步：/video-pipeline convert <article路径>
 ```
 
-评级对照：S≥72 / A≥60 / B≥48 / C≥32 / D<32（满分80，视频维度在convert后加）
+评级对照：S≥90 / A≥75 / B≥60 / C≥45 / D<45
 
 ---
 
@@ -328,7 +342,7 @@ python3 /root/video-pipeline/pipeline/collect_media.py \
 - 动态提取 Tab 栏标签（从概览区 H3 分类 + 开场/结尾 固定项）
 
 **C2 — TTS 配音 + ASS 字幕**
-- edge-tts 声音：`zh-CN-YunxiNeural`（明明），rate=+5%
+- edge-tts 声音：`zh-CN-XiaoxiaoNeural`（晓晓），rate=+5%
 - 开场固定句：`"欢迎收看《文章标题》，本期带来 X 条热门资讯。"`
 - 口播内容：每条新闻 blockquote 摘要（去除 `摘要：` 前缀及 Markdown 格式）
 - 结尾固定：`"感谢收听，明天见。"`

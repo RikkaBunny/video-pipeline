@@ -15,16 +15,26 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 # ── Config ────────────────────────────────────────────────────────────────────
-import sys
-ARTICLE = sys.argv[1] if len(sys.argv) > 1 else \
-          "/root/video-pipeline/output/2026-04-09/ai/article.md"
+import sys, uuid, atexit
+if len(sys.argv) < 2:
+    print("用法: python3 convert_sketch_v2.py <article.md 路径>", file=sys.stderr)
+    sys.exit(1)
+ARTICLE = sys.argv[1]
+if not Path(ARTICLE).exists():
+    print(f"错误: article.md 不存在: {ARTICLE}", file=sys.stderr)
+    sys.exit(1)
 OUT_DIR  = Path(ARTICLE).parent
-BUILD    = Path("/tmp/vp_sketch_v2")
+BUILD    = Path(f"/tmp/vp_sketch_v2_{uuid.uuid4().hex[:8]}")
 FONT     = "/root/video-pipeline/assets/fonts/NotoSansSC-Regular.ttf"
 W, H     = 1920, 1080
 
 for sub in ["audio", "slides", "subs", "media", "html"]:
     (BUILD / sub).mkdir(parents=True, exist_ok=True)
+
+def _cleanup_build():
+    if BUILD.exists():
+        shutil.rmtree(BUILD, ignore_errors=True)
+atexit.register(_cleanup_build)
 
 # ── ASS subtitle (字幕) ───────────────────────────────────────────────────────
 ASS_FONT     = "Noto Sans CJK SC"
@@ -107,7 +117,7 @@ def sentences_to_ass(sentences, ass_path):
     Path(ass_path).write_text(ASS_HEADER + '\n'.join(events) + '\n', encoding='utf-8')
 
 # ── TTS ───────────────────────────────────────────────────────────────────────
-VOICE = "zh-CN-YunxiNeural"
+VOICE = "zh-CN-XiaoxiaoNeural"
 
 async def tts_with_subs(text, audio_out, ass_out, rate="+5%"):
     import edge_tts
@@ -165,10 +175,18 @@ def parse(path):
                     if nm: num2cat[int(nm.group(1))] = cur
     news = []
     for sec in re.split(r'\n## ', txt)[1:]:
+        # 支持两种格式：
+        #   "标题文字 #N\n"（编号在末尾，旧格式）
+        #   "#N 标题文字\n"（编号在开头，新格式）
         hdr = re.match(r'^(.+?)\s*#(\d+)\s*\n', sec)
-        if not hdr: continue
-        num   = int(hdr.group(2))
-        title = strip_md(hdr.group(1).strip())
+        if hdr:
+            num   = int(hdr.group(2))
+            title = strip_md(hdr.group(1).strip())
+        else:
+            hdr2 = re.match(r'^#(\d+)\s+(.+?)\s*\n', sec)
+            if not hdr2: continue
+            num   = int(hdr2.group(1))
+            title = strip_md(hdr2.group(2).strip())
         parts = [ln[2:] for ln in sec.splitlines() if ln.startswith('> ')]
         summary = strip_md(' '.join(parts))
         cards = []
@@ -1665,11 +1683,7 @@ async def main():
 
         # 拆字幕（只给 slide_B 用，时间戳前移 t_a）
         ass_b_path = str(BUILD / "subs" / f"{item['num']:02d}_b.ass")
-        try:
-            shift_ass(ai['ass'], ass_b_path, t_a)
-        except Exception as e:
-            print(f"    ⚠️  字幕偏移失败: {e}")
-            ass_b_path = ai['ass']
+        shift_ass(ai['ass'], ass_b_path, t_a)   # 失败直接上抛，字幕错位比静默继续更好发现
 
         sp_a = str(BUILD / f"seg_{item['num']:02d}a.mp4")
         sp_b = str(BUILD / f"seg_{item['num']:02d}b.mp4")
