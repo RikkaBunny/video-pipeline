@@ -7,11 +7,15 @@ Updates:
   - Subtitles generated from SentenceBoundary events, burned into video
   - Voice fixed: zh-CN-YunxiNeural (明明)
 """
-import re, asyncio, subprocess, json, math, urllib.request, shutil
+import re, asyncio, subprocess, json, math, urllib.request, shutil, argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-ARTICLE = "/root/video-pipeline/output/2026-04-08/github/article.md"
+_parser = argparse.ArgumentParser(description="video-pipeline convert v5 — NotebookLM dark style")
+_parser.add_argument("article", nargs="?",
+    default="/root/video-pipeline/output/2026-04-08/github/article.md",
+    help="Path to article.md (default: 2026-04-08/github)")
+ARTICLE = _parser.parse_args().article
 OUT_DIR = Path(ARTICLE).parent
 BUILD   = Path("/tmp/vp_build3")
 FONT    = "/root/video-pipeline/assets/fonts/NotoSansSC-Regular.ttf"

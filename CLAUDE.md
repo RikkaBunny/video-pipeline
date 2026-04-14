@@ -14,16 +14,32 @@
 定时任务 Prompt：
 ```
 执行 /video-pipeline run，类型根据今天日期自动判断：偶数日用 ai，奇数日用 github（用 TZ=Asia/Shanghai date +%j 取年内第几天判断奇偶）。
-完整流程：抓取RSS源→去重→生成图文文章→采集素材→convert_sketch.py转视频→biliup上传B站。
-全程不要询问确认，直接执行到底。
+
+完整流程（带 M2 双门禁）：
+  S0 preflight → A1-A4 抓取/去重/生成/保存 → A5 evaluator 门禁
+    → C1-C6 convert_sketch_v2.py → C7 evaluator 门禁 → upload
+
+自动模式硬规则（cron 触发时必须遵守）：
+  1. A5 门禁：score < 60 触发最多 2 轮精准修订；仍失败 → 终止本期，写 run-log 标 ABORTED，不进 convert。
+  2. C7 门禁：score < min_score_to_upload(=75) **严禁上传**。视频保存在本地，但不传 B 站。写 run-log 标 convert_only。
+  3. score ≥ 75 才允许自动上传。
+  4. 任何阶段致命错误都终止 + 写 log，不吞错、不降级。
+  5. run-log 位置：/root/video-pipeline/logs/run-<ISO8601>.json
+
+宁可今天不发，也不发烂片——这是 Harness Engineering 的核心原则。
 ```
 
 > 原因：CronCreate 任务 7 天后过期，通过每次启动自动注册来保持任务持续有效。
 
 ## 项目结构
 
-- `convert.py` — NotebookLM 暗色风格视频生成
-- `convert_sketch.py` — 手绘莫兰迪风格视频生成（当前主用）
+- `convert.py` — NotebookLM 暗色风格视频生成（早期版）
+- `convert_sketch.py` — 手绘莫兰迪风格 v1（baseline 保留，不再使用）
+- `convert_sketch_v2.py` — **当前主用**，手绘风格 v2（Pass 1 降密 + Pass 4 视觉一致性）
+  - 每条新闻拆成 slide_A 读图屏 + slide_B 读卡片屏
+  - 3 卡片布局 + 右侧留白 + Mascot 兔子
+  - 4 色调色板锁定，陶土红/茶蓝主色
+  - Ken Burns 图片动画
 - `pipeline/collect_media.py` — 智能多策略素材采集
 - `pipeline/dedup.db` — URL 去重数据库
 - `config/sources.yaml` — RSS 源配置

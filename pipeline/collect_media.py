@@ -313,8 +313,39 @@ def collect_twitter(url, out_dir, num):
 
 # ── 验证素材质量 ──────────────────────────────────────────────────────────────
 
+def normalize_image(path):
+    """把图片规范化为 RGB PNG（透明背景压白）。返回 (ok, reason)。
+    避免渲染端把 RGBA 透明像素当成黑色 → 视频里出现纯黑色块。
+    同时拒绝近乎单色的图（透明 logo flatten 后还是单色的 / 真黑图 / 真白图也不行）。
+    """
+    try:
+        from PIL import Image, ImageStat
+    except Exception as e:
+        return False, f"PIL unavailable: {e}"
+    p = Path(path)
+    try:
+        img = Image.open(str(p))
+        img.load()
+    except Exception as e:
+        return False, f"open failed: {e}"
+    # 含 alpha → 白底 flatten
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        img = img.convert("RGBA")
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1])
+        img = bg
+    else:
+        img = img.convert("RGB")
+    # 单色检测：三通道 stddev 全 < 6 视为近乎纯色
+    stat = ImageStat.Stat(img)
+    if max(stat.stddev) < 6:
+        return False, f"near-monochrome stddev={[round(x,1) for x in stat.stddev]} mean={[round(x,1) for x in stat.mean]}"
+    img.save(str(p), "PNG", optimize=True)
+    return True, "ok"
+
+
 def validate_media(result):
-    """验证素材：文件存在、大小合理、不是纯色/极小图片。"""
+    """验证素材：文件存在、大小合理、尺寸够大、规范化为 RGB、不是纯色。"""
     if not result or not result.get("path"):
         return False
     p = Path(result["path"])
@@ -324,7 +355,7 @@ def validate_media(result):
     if size < 4000:
         print(f"  [validate] FAIL too small: {size}B", file=sys.stderr)
         return False
-    # 图片：用 PIL 检查尺寸
+    # 图片：尺寸 + 规范化（透明 flatten）+ 单色检测
     if result.get("type") == "image":
         try:
             from PIL import Image
@@ -334,8 +365,40 @@ def validate_media(result):
                 print(f"  [validate] FAIL too tiny: {w}x{h}", file=sys.stderr)
                 return False
         except Exception:
-            pass  # 非图片格式（gif/mp4 允许）
+            return True  # 非图片格式（gif/mp4 允许）
+        ok, why = normalize_image(p)
+        if not ok:
+            print(f"  [validate] FAIL {why}: {p.name}", file=sys.stderr)
+            return False
     return True
+
+
+def check_dir(media_dir):
+    """目录级体检：扫描 <dir> 下所有 *_media_*.{png,jpg,jpeg,webp}。
+    对每张图执行 normalize_image，输出报告。返回坏图数量。
+    供 skill 在素材采集后做最终门禁。"""
+    d = Path(media_dir)
+    if not d.exists():
+        print(f"[check] dir not found: {d}", file=sys.stderr)
+        return 1
+    bad = 0
+    files = sorted([p for p in d.iterdir()
+                    if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+                    and "_media_" in p.name])
+    for p in files:
+        size = p.stat().st_size
+        if size < 4000:
+            print(f"  ✗ {p.name}  too small {size}B")
+            bad += 1
+            continue
+        ok, why = normalize_image(p)
+        if ok:
+            print(f"  ✓ {p.name}")
+        else:
+            print(f"  ✗ {p.name}  {why}")
+            bad += 1
+    print(f"[check] {len(files)-bad}/{len(files)} pass, {bad} bad")
+    return bad
 
 # ── 主入口 ────────────────────────────────────────────────────────────────────
 
@@ -387,12 +450,20 @@ def collect(url, out_dir, num, hint_type=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", required=True)
-    parser.add_argument("--out", required=True, help="输出目录")
+    parser.add_argument("--url", required=False)
+    parser.add_argument("--out", required=False, help="输出目录")
     parser.add_argument("--num", type=int, default=1, help="新闻编号（用于文件名）")
     parser.add_argument("--type", dest="hint_type", default=None,
                         choices=["github", "article", "twitter", "youtube", "research"])
+    parser.add_argument("--check-dir", dest="check_dir_path", default=None,
+                        help="只对该目录内已有素材做体检（透明 flatten + 单色检测），坏图返回非零退出码")
     args = parser.parse_args()
 
+    if args.check_dir_path:
+        bad = check_dir(args.check_dir_path)
+        sys.exit(1 if bad else 0)
+
+    if not args.url or not args.out:
+        parser.error("--url and --out are required (unless --check-dir)")
     result = collect(args.url, args.out, args.num, args.hint_type)
     print(json.dumps(result, ensure_ascii=False))
