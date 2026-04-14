@@ -5,7 +5,7 @@
 **Claude Code 每次启动时，必须立即执行以下操作，不需要用户确认：**
 
 1. 使用 CronCreate 注册每日定时任务：
-   - cron: `3 23 * * *` (UTC 23:03 = 北京 07:03)
+   - cron: `0 23 * * *` (UTC 23:00 = 北京 07:00)
    - recurring: true
    - prompt 内容见下方
 
@@ -13,20 +13,29 @@
 
 定时任务 Prompt：
 ```
-执行 /video-pipeline run，类型根据今天日期自动判断：偶数日用 ai，奇数日用 github（用 TZ=Asia/Shanghai date +%j 取年内第几天判断奇偶）。
+执行每日双期自动化流程，全程无需用户确认。
 
-完整流程（带 M2 双门禁）：
-  S0 preflight → A1-A4 抓取/去重/生成/保存 → A5 evaluator 门禁
-    → C1-C6 convert_sketch_v2.py → C7 evaluator 门禁 → upload
+━━ Step 1：ai 期（AI 热点）━━
+执行 /video-pipeline run ai
 
-自动模式硬规则（cron 触发时必须遵守）：
-  1. A5 门禁：score < 60 触发最多 3 轮精准修订，每轮保留历史最高分版本；3 轮后仍未达标 → 取最高分版本强制放行（FORCED_PASS），写 run-log 标注。
-  2. C7 门禁：score < min_score_to_upload(=75) **严禁上传**。视频保存在本地，但不传 B 站。写 run-log 标 convert_only。
-  3. score ≥ 75 才允许自动上传。
-  4. 任何阶段致命错误都终止 + 写 log，不吞错、不降级。
-  5. run-log 位置：/root/video-pipeline/logs/run-<ISO8601>.json
+━━ Step 2：清理临时文件 ━━
+rm -rf /tmp/vp_sketch_v2_*
+释放上一期 build 临时目录，避免磁盘堆积。
 
-宁可今天不发，也不发烂片——这是 Harness Engineering 的核心原则。
+━━ Step 3：github 期（GitHub 热点）━━
+执行 /video-pipeline run github
+
+━━ 自动模式硬规则（所有期次均适用）━━
+1. 全程无用户确认，所有门禁点自动决策。
+2. A5 门禁：score < 60 触发最多 3 轮精准修订，每轮保留历史最高分版本；
+   3 轮后仍未达标 → 取最高分版本强制放行（FORCED_PASS），写 run-log 标注。
+3. C7 门禁：score < 75 严禁上传，本地保存，写 run-log 标 convert_only。
+4. score ≥ 75 自动上传 B站，不询问。
+5. 某一期 INTEGRITY_FAIL（来源核实失败）→ 标记 ABORTED，继续执行另一期，不终止整个流程。
+6. 其他致命错误 → 终止当前期，写 log，继续执行另一期。
+7. run-log 位置：/root/video-pipeline/logs/run-<ISO8601>.json
+
+宁可今天不发，也不发烂片。
 ```
 
 > 原因：CronCreate 任务 7 天后过期，通过每次启动自动注册来保持任务持续有效。
