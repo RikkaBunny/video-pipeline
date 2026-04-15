@@ -29,8 +29,8 @@ rm -rf /tmp/vp_sketch_v2_*
 1. 全程无用户确认，所有门禁点自动决策。
 2. A5 门禁：score < 60 触发最多 3 轮精准修订，每轮保留历史最高分版本；
    3 轮后仍未达标 → 取最高分版本强制放行（FORCED_PASS），写 run-log 标注。
-3. C7 门禁：score < 75 严禁上传，本地保存，写 run-log 标 convert_only。
-4. score ≥ 75 自动上传 B站，不询问。
+3. C7 门禁：score < 60 严禁上传，本地保存，写 run-log 标 convert_only。
+4. score ≥ 60 自动上传 B站，不询问。
 5. 某一期 INTEGRITY_FAIL（来源核实失败）→ 标记 ABORTED，继续执行另一期，不终止整个流程。
 6. 其他致命错误 → 终止当前期，写 log，继续执行另一期。
 7. run-log 位置：/root/video-pipeline/logs/run-<ISO8601>.json

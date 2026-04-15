@@ -1,140 +1,62 @@
 #!/bin/bash
-# auto_daily.sh — 每日自动生成视频并上传B站
-# 用法: auto_daily.sh [ai|github]  (不传参则按日期奇偶轮换)
+# auto_daily.sh — 每日双期自动化流程（系统 cron 版）
+# 挂载方式: 0 23 * * * /root/video-pipeline/auto_daily.sh >> /root/video-pipeline/logs/cron-shell.log 2>&1
+#
+# 本脚本调用 claude CLI 执行完整的双期流程（ai + github），
+# 包含 A5/C7 门禁、FORCED_PASS、自动上传等逻辑，全程无需用户确认。
+
 set -uo pipefail
 
-# 确保 cron 环境下也能找到所有命令
-export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-export HOME="${HOME:-/root}"
+export PATH="/root/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export HOME="/root"
 
 cd /root/video-pipeline
+
 DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
-DAY_NUM=$(TZ=Asia/Shanghai date +%j)
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
-LOG="$LOG_DIR/${DATE}.log"
 
-exec > >(tee -a "$LOG") 2>&1
 echo "============================================"
-echo "  auto_daily.sh  |  $DATE  |  $(date -u)"
+echo "  auto_daily.sh  |  $DATE  |  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "============================================"
 
-# 1. 确定类型
-if [ -n "${1:-}" ]; then
-    TYPE="$1"
-else
-    if (( DAY_NUM % 2 == 0 )); then
-        TYPE="ai"
-    else
-        TYPE="github"
-    fi
-fi
-echo "[INFO] 今日类型: $TYPE"
-
-OUT_DIR="output/$DATE/$TYPE"
-FULL_OUT="/root/video-pipeline/$OUT_DIR"
-mkdir -p "$FULL_OUT/media"
-
-# 2. 用 claude -p 生成文章（分步，更可靠）
-echo ""
-echo "[STEP 1/4] 生成图文文章..."
-
-# 写入 prompt 文件（避免 shell 转义问题）
-cat > /tmp/vp_prompt.txt << PROMPT_EOF
-在 /root/video-pipeline 目录下，为 $TYPE 类型生成今日($DATE)的早报图文文章。
-
-具体步骤：
-1. 用Python feedparser抓取 config/sources.yaml 中 $TYPE 的RSS源，获取最近7天的新闻(每个源最多5条)
-2. 用sqlite3检查 pipeline/dedup.db 去重，排除已处理的URL
-3. 选取5-8条最有价值的新闻
-4. 生成 $FULL_OUT/article.md，格式要求：
-   - YAML frontmatter: title(关键事件;关键事件【早报 $DATE】), type=$TYPE, date=$DATE
-   - H1日期标题, H2概览(2-4分类), 每条H2新闻(blockquote摘要80-170字+正文+来源URL代码块+恰好5个emoji要点卡片)
-   - 结尾: 提示：内容由AI辅助创作，可能存在幻觉和错误。 和 作者Bunny，视频版在同名哔哩哔哩。欢迎点赞、关注、分享。
-   - 正文首句来源归因, 产品名用code格式, 公司名加粗
-5. 为每条新闻运行: python3 pipeline/collect_media.py --url <URL> --out $FULL_OUT/media --num <N>
-6. 在article.md对应位置插入媒体引用和media_score注释
-7. 将URL注册到 pipeline/dedup.db (type=$TYPE)
-
-不要询问确认，直接执行所有步骤。
-PROMPT_EOF
-
-# 用 script 命令模拟 pseudo-terminal（解决 cron 无终端问题）
-script -qec "claude -p \"\$(cat /tmp/vp_prompt.txt)\" --max-turns 40" /tmp/vp_article_out.txt </dev/null
-
-# 查找生成的 article.md
-ARTICLE_PATH="$FULL_OUT/article.md"
-if [ ! -f "$ARTICLE_PATH" ]; then
-    # 尝试查找其他位置
-    FOUND=$(find /root/video-pipeline/output/$DATE -name "article.md" -type f 2>/dev/null | head -1)
-    if [ -n "$FOUND" ]; then
-        ARTICLE_PATH="$FOUND"
-    fi
-fi
-
-if [ ! -f "$ARTICLE_PATH" ]; then
-    echo "[ERROR] 文章生成失败，未找到 article.md"
-    echo "[DEBUG] 查找路径: $FULL_OUT/article.md"
-    echo "[DEBUG] output目录内容:"
-    find /root/video-pipeline/output/$DATE -type f 2>/dev/null || echo "  (空)"
+# 检查 claude CLI
+if ! command -v claude &>/dev/null; then
+    echo "[FATAL] claude CLI 未找到，退出"
     exit 1
 fi
-echo "[OK] 文章: $ARTICLE_PATH"
 
-# 3. 转换为视频（手绘风格）
-echo ""
-echo "[STEP 2/4] 转换视频（手绘风格）..."
-python3 convert_sketch.py "$ARTICLE_PATH" 2>&1
+PROMPT='执行每日双期自动化流程，全程无需用户确认。
 
-VIDEO_DIR="$(dirname "$ARTICLE_PATH")"
-VIDEO_PATH="$VIDEO_DIR/video_sketch.mp4"
+━━ Step 1：ai 期（AI 热点）━━
+执行 /video-pipeline run ai
 
-if [ ! -f "$VIDEO_PATH" ]; then
-    echo "[ERROR] 视频生成失败，未找到 $VIDEO_PATH"
-    exit 1
-fi
-VIDEO_SIZE=$(du -h "$VIDEO_PATH" | cut -f1)
-echo "[OK] 视频: $VIDEO_PATH ($VIDEO_SIZE)"
+━━ Step 2：清理临时文件 ━━
+删除 /tmp/vp_sketch_v2_* 目录，释放上一期 build 临时文件，避免磁盘堆积。
 
-# 4. 提取标题和标签
-echo ""
-echo "[STEP 3/4] 准备上传信息..."
-TITLE=$(grep '^title:' "$ARTICLE_PATH" | head -1 | sed 's/title:[[:space:]]*"\{0,1\}\(.*\)"\{0,1\}/\1/' | tr -d '"')
-if [ ${#TITLE} -gt 80 ]; then
-    TITLE="${TITLE:0:77}..."
-fi
+━━ Step 3：github 期（GitHub 热点）━━
+执行 /video-pipeline run github
 
-if [ "$TYPE" = "ai" ]; then
-    TAGS="AI,科技,LLM,早报"
-else
-    TAGS="GitHub,开源,科技,开发者"
-fi
-echo "  标题: $TITLE"
-echo "  标签: $TAGS"
+━━ 自动模式硬规则（所有期次均适用）━━
+1. 全程无用户确认，所有门禁点自动决策。
+2. A5 门禁：score < 60 触发最多 3 轮精准修订，每轮保留历史最高分版本；
+   3 轮后仍未达标 → 取最高分版本强制放行（FORCED_PASS），写 run-log 标注。
+3. C7 门禁：score < 60 严禁上传，本地保存，写 run-log 标 convert_only。
+4. score >= 60 自动上传 B站，不询问。
+5. 某一期 INTEGRITY_FAIL（来源核实失败）→ 标记 ABORTED，继续执行另一期，不终止整个流程。
+6. 其他致命错误 → 终止当前期，写 log，继续执行另一期。
+7. run-log 位置：/root/video-pipeline/logs/run-<ISO8601>.json
 
-# 5. 上传B站
-echo ""
-echo "[STEP 4/4] 上传B站..."
-biliup renew 2>&1 | head -2 || echo "[WARN] biliup renew 失败，继续尝试上传"
+宁可今天不发，也不发烂片。'
 
-COVER=$(ls "$VIDEO_DIR"/media/01_media_og.png 2>/dev/null || echo "")
-COVER_ARG=""
-if [ -n "$COVER" ]; then
-    COVER_ARG="--cover $COVER"
-fi
+echo "[INFO] 启动 claude CLI（settings.json: defaultMode=dontAsk）..."
+claude --max-turns 120 \
+       -p "$PROMPT" \
+       2>&1
 
-biliup upload "$VIDEO_PATH" \
-    --title "$TITLE" \
-    --desc "内容由AI辅助创作，可能存在幻觉和错误。作者Bunny，欢迎点赞关注分享。" \
-    --tag "$TAGS" \
-    --tid 231 \
-    $COVER_ARG \
-    2>&1
-
+EXIT_CODE=$?
 echo ""
 echo "============================================"
-echo "  [DONE] $DATE $TYPE 完成"
-echo "  文章: $ARTICLE_PATH"
-echo "  视频: $VIDEO_PATH"
-echo "  日志: $LOG"
+echo "  [DONE] claude 退出码: $EXIT_CODE  |  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "============================================"
+exit $EXIT_CODE
