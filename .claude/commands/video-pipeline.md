@@ -42,6 +42,53 @@ tts_voice: yunyang   # 默认；改 yunjian 用激情男声
 
 不写则默认 yunyang。其他 frontmatter 字段与 v1 完全相同。
 
+### 步骤
+
+**A1 — 抓取内容**（启动 video-scraper 子 Agent）
+- `github`：GitHub Trending weekly Top 10 + Hacker News RSS Top 5
+- `ai`：HuggingFace Blog RSS + VentureBeat AI RSS + arxiv cs.AI 最新 5 篇
+- `daily`：36氪 RSS + 少数派 RSS + Hacker News Top 10
+
+**A2 — 过滤去重** SQLite url hash，过滤 >7 天旧内容，有效 ≥3 条
+
+**A3 — 生成结构化图文文章 + B-roll 编排**（启动 video-script-writer 子 Agent）
+
+video-script-writer agent **同时产出两个文件**（两个都必须写盘）：
+1. `article.md` — 口播稿 + 5 张要点卡片
+2. `visual_beats.json` — 每条新闻 6-8 个异构 B-roll beat
+
+**visual_beats.json 硬约束**（agent 必须遵守）：
+- 每条新闻 6-8 个 beat，同条内类型不重复
+- 10 类 beat：`logo-hero` / `wordmark` / `metric-cards` / `codeblock` / `tools-cascade` / `mockup(slack|discord|imessage)` / `glyphs` / `stat-hero` / `timeline` / `image-hero`
+- 排序：logo-hero 或 image-hero 开场 → wordmark/stat-hero 紧随 → 中段 2-4 个内容型 → glyphs/image-hero 收尾
+- 每 beat `weight` ∈ [0.08, 0.25]，总和 ≈ 1.0
+- 详细 schema 见 `video-script-writer` agent 的 system prompt
+
+**article.md 写作要求**（直接影响 /video-score 得分，必须满足）：
+- 每条摘要 blockquote **80-170 字**（B2）
+- 每条新闻 **5 张要点卡片**（B3）
+- **零禁用词**：惊艳/颠覆/革命性/史诗级/遥遥领先/大家好/感谢阅读（B4）
+- 正文第一句必须含来源归因（"近日，"/"据媒体报道，"/"官方称，"）
+- 每段 60-130 字，每段只说一件事
+- 分类（概览区 H3）自由命名，2-6 字，2-4 个分类
+- 详细格式规范见 `_archive/video-pipeline.v1.md` 第 71-217 行
+
+**A4 — 保存**
+- `/root/video-pipeline/output/<date>/<type>/article.md`
+- `/root/video-pipeline/output/<date>/<type>/visual_beats.json`
+
+**A4.5 — 素材采集**（`pipeline/collect_media.py` 自动选最优）
+```bash
+python3 /root/video-pipeline/pipeline/collect_media.py \
+  --url <新闻来源URL> --out <output_dir>/media --num <N>
+```
+素材分 ≥ 3 分，失败用 Playwright 补截图。详见 `_archive/video-pipeline.v1.md` A4.5。
+
+**A5 — Evaluator 门禁**（调用 `/video-score`）
+- `min_score_to_convert = 60` · `max_revision_rounds = 3`
+- 3 轮仍未达标 → 取历史最高分版本强制放行（FORCED_PASS）
+- integrity_fail → ABORTED
+
 ---
 
 ## Convert 流程（v2 替换 v1 convert）
@@ -51,8 +98,8 @@ tts_voice: yunyang   # 默认；改 yunjian 用激情男声
 python3 /root/video-pipeline/convert_hyperframes.py <article.md> [--quality draft|standard|high]
 ```
 
-默认 `--quality draft`（VPS 上一期约 30-40 分钟）。
-production cron 用 `--quality standard`（约 60-90 分钟，画质更佳）。
+**默认使用 `--quality draft`（生产 cron 同样用 draft）**，一期约 14-18 分钟。
+`standard`（60-90 分钟）只在手动触发、时间允许时使用，cron 禁止。
 
 **Pipeline 内部步骤：**
 
