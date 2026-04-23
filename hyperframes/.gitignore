@@ -1,0 +1,19 @@
+# 生成产物（每次 convert 重新生成）
+index.html
+assets/audio/
+assets/media/
+assets/logos/
+demo_*.mp4
+demo_*.png
+smoke.*
+kf*.jpg
+frame_*.jpg
+
+# 比较/调试目录
+_compare/
+
+# Node modules（HyperFrames 自己装）
+node_modules/
+
+# HyperFrames cache
+.hyperframes-cache/
