@@ -17,3 +17,8 @@ node_modules/
 
 # HyperFrames cache
 .hyperframes-cache/
+
+# 预览 mp4（挂在本地 http server 用）
+_full_v2.mp4
+_v2_*.mp4
+preview.html
