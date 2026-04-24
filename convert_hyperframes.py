@@ -516,14 +516,50 @@ class RenderedBeat:
     animate_kind: str = ""   # extra hint for GSAP (e.g. "stagger-cards")
 
 def load_visual_beats(article_dir: Path) -> dict | None:
+    """读 visual_beats.json。做 schema 适配兼容 LLM schema drift：
+    - agent 可能输出 news/items、news_id/index、payload/data 两套键，全部映射到规范名
+    - episode 可能是 string 或 int，统一成 int（取不到默认 1）
+    """
     p = article_dir / "visual_beats.json"
     if not p.exists(): return None
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        if "items" not in data: return None
-        return data
+        raw = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+    # 规范化顶层
+    items_raw = raw.get("items") or raw.get("news") or raw.get("episodes") or []
+    if not items_raw:
+        return None
+
+    # 规范化 episode（字符串→整数或 1）
+    ep_raw = raw.get("episode", 1)
+    try:
+        episode = int(ep_raw) if isinstance(ep_raw, (int, float)) else int(str(ep_raw).split("-")[-1])
+    except Exception:
+        episode = 1
+
+    normalized = {
+        "version": 1,
+        "episode": episode,
+        "type": raw.get("type", ""),
+        "items": [],
+    }
+    for it in items_raw:
+        idx = it.get("index") or it.get("news_id") or it.get("id") or (len(normalized["items"]) + 1)
+        beats_raw = it.get("beats", [])
+        beats_norm = []
+        for b in beats_raw:
+            btype = b.get("type", "")
+            weight = b.get("weight", 1.0 / max(len(beats_raw), 1))
+            data = b.get("data") or b.get("payload") or {}
+            beats_norm.append({"type": btype, "weight": weight, "data": data})
+        normalized["items"].append({
+            "index": int(idx) if str(idx).isdigit() else len(normalized["items"]) + 1,
+            "eyebrow_en": it.get("eyebrow_en", ""),
+            "beats": beats_norm,
+        })
+    return normalized
 
 def allocate_beat_times(weights: list[float], total: float,
                         min_dur: float = MIN_BEAT_DUR, max_dur: float = MAX_BEAT_DUR
@@ -582,8 +618,13 @@ def wrap_broll(inner: str, start: float, dur: float, track: int, tag_id: str = "
 
 # ── 1. logo-hero ──────────────────────────────────────────────────────────
 def render_logo_hero(data: dict, item: NewsItem) -> tuple[str, str]:
-    company = data.get("company", "")
-    slug = COMPANY_LOGOS.get(company) or item.company_slug
+    # 兼容多种字段名：company/brand/name，slug 可能 agent 直接给
+    company = data.get("company") or data.get("brand") or data.get("name") or ""
+    direct_slug = data.get("slug", "")
+    slug = direct_slug or COMPANY_LOGOS.get(company) or item.company_slug
+    # 直接 slug 先拉一下缓存（agent 给的 slug 可能还没下载）
+    if direct_slug:
+        fetch_logo(direct_slug)
     # HyperFrames 不可靠地继承 CSS fill 到 inline SVG，inline 写 fill 强制 #1D1D1F
     svg = read_logo_svg(slug, inline_color="#1D1D1F") if slug else ""
     if svg:
@@ -597,12 +638,17 @@ def render_logo_hero(data: dict, item: NewsItem) -> tuple[str, str]:
 
 # ── 2. wordmark ───────────────────────────────────────────────────────────
 def render_wordmark(data: dict) -> tuple[str, str]:
-    lines = data.get("lines", ["WORDMARK"])
+    # 兼容 text 单字段（agent 有时给单行字符串）+ lines 数组
+    lines = data.get("lines")
+    if not lines:
+        text = data.get("text") or data.get("word") or "WORDMARK"
+        # 单行字符串转数组
+        lines = [text] if isinstance(text, str) else list(text)
     accent = data.get("accent_line", -1)
     spans = []
     for i, line in enumerate(lines):
         cls = ' class="accent"' if i == accent else ""
-        spans.append(f'<span{cls}>{html_escape(line)}</span>')
+        spans.append(f'<span{cls}>{html_escape(str(line))}</span>')
     return f'<div class="b-wordmark">{"<br>".join(spans)}</div>', "fade-up"
 
 # ── 3. metric-cards ───────────────────────────────────────────────────────
