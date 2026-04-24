@@ -552,7 +552,13 @@ def load_visual_beats(article_dir: Path) -> dict | None:
         for b in beats_raw:
             btype = b.get("type", "")
             weight = b.get("weight", 1.0 / max(len(beats_raw), 1))
-            data = b.get("data") or b.get("payload") or {}
+            # Schema drift 兼容：data / payload / content / props / attributes
+            data = (b.get("data") or b.get("payload") or b.get("content")
+                    or b.get("props") or b.get("attributes") or {})
+            # 如果 data 还是空但 b 本身含识别字段，把 b 除了 meta 键之外的当 data
+            if not data:
+                meta_keys = {"type", "weight", "id", "index", "order"}
+                data = {k: v for k, v in b.items() if k not in meta_keys}
             beats_norm.append({"type": btype, "weight": weight, "data": data})
         normalized["items"].append({
             "index": int(idx) if str(idx).isdigit() else len(normalized["items"]) + 1,
@@ -1471,6 +1477,12 @@ def main():
     print(f"▶ Parsing: {article_path}")
     episode = parse_article(article_path)
     visual = load_visual_beats(article_path.parent)
+    # 若 visual_beats.json 存在但无法解析（schema drift），应硬失败而不是默默降级
+    vb_path = article_path.parent / "visual_beats.json"
+    if vb_path.exists() and visual is None:
+        print(f"  ✗ visual_beats.json 存在但 schema 无法识别", file=sys.stderr)
+        print(f"  请检查 {vb_path}，补全 adapter 或修 agent 产出格式", file=sys.stderr)
+        sys.exit(3)
     mode = "rich (visual_beats.json)" if visual else "fallback (4-beat)"
     print(f"  episode {episode.episode} · {episode.date} · {len(episode.news)} 条新闻 · 主播={episode.voice} · {mode}")
 
