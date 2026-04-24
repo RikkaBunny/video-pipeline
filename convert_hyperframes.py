@@ -777,21 +777,27 @@ def render_timeline(data: dict) -> tuple[str, str]:
 
 # ── 10. image-hero ────────────────────────────────────────────────────────
 def render_image_hero(data: dict, item: NewsItem) -> tuple[str, str]:
+    """优先用 article.md 的真实 media（scraper 统一命名），
+    agent 的 filename 可能是幻觉产物，仅作 hint 不信任。
+    """
+    media_dir = PROJECT / "assets" / "media"
+    # 优先：article 里的 item.media_path（scraper 抓的实际文件）
+    if item.media_path:
+        rel = f"./assets/media/{item.media_path.name}"
+        if item.media_is_video:
+            return (f'<div class="b-image"><video src="{rel}" muted autoplay loop></video></div>',
+                    "fade")
+        return f'<div class="b-image"><img src="{rel}" alt=""/></div>', "fade"
+    # 次选：agent 的 filename，若文件真实存在
     filename = data.get("filename", "")
-    if filename:
+    if filename and (media_dir / filename).exists():
         rel = f"./assets/media/{filename}"
-    elif item.media_path and not item.media_is_video:
-        rel = f"./assets/media/{item.media_path.name}"
-    elif item.media_path and item.media_is_video:
-        rel = f"./assets/media/{item.media_path.name}"
-        return (f'<div class="b-image"><video src="{rel}" muted autoplay loop></video></div>',
-                "fade")
-    else:
-        return render_logo_hero({"company": item.company_name or ""}, item)
-    if rel.lower().endswith((".mp4", ".webm", ".mov")):
-        return (f'<div class="b-image"><video src="{rel}" muted autoplay loop></video></div>',
-                "fade")
-    return f'<div class="b-image"><img src="{rel}" alt=""/></div>', "fade"
+        if filename.lower().endswith((".mp4", ".webm", ".mov")):
+            return (f'<div class="b-image"><video src="{rel}" muted autoplay loop></video></div>',
+                    "fade")
+        return f'<div class="b-image"><img src="{rel}" alt=""/></div>', "fade"
+    # 兜底：用 logo（有公司）或大编号
+    return render_logo_hero({"company": item.company_name or ""}, item)
 
 RENDERERS = {
     "logo-hero":      lambda d, it: render_logo_hero(d, it),
