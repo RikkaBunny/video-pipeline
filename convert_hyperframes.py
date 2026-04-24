@@ -74,6 +74,47 @@ COMPANY_LOGOS: dict[str, str | None] = {
     "Tesla": "tesla",
 }
 
+# tools-cascade 的 label → simple-icons slug 别名表
+# 当 agent 只给 label 没给 slug 时做兜底映射
+SLUG_ALIASES: dict[str, str] = {
+    # 消费类 App
+    "spotify": "spotify", "audible": "audible", "ubereats": "ubereats",
+    "uber": "uber", "ubereat": "ubereats", "turbotax": "turbotax",
+    "netflix": "netflix", "youtube": "youtube",
+    # 开发工具
+    "github": "github", "gitlab": "gitlab", "vscode": "vscodium",
+    "npm": "npm", "pnpm": "pnpm", "python": "python", "node": "nodedotjs",
+    "nodejs": "nodedotjs", "node.js": "nodedotjs",
+    "rust": "rust", "go": "go", "typescript": "typescript",
+    "docker": "docker", "kubernetes": "kubernetes", "k8s": "kubernetes",
+    # 模型 / 推理
+    "ollama": "ollama", "huggingface": "huggingface", "vllm": "",  # vLLM 无 icon
+    "llama.cpp": "", "llamacpp": "", "openai": "openai",
+    "anthropic": "anthropic", "claude": "anthropic",
+    "mistral": "mistralai", "cohere": "",
+    # 协作
+    "slack": "slack", "discord": "discord", "notion": "notion",
+    "linear": "linear", "figma": "figma", "jira": "jira",
+    "trello": "trello", "airtable": "airtable", "zapier": "zapier",
+    # Google / Microsoft / Apple 生态
+    "googledocs": "googledocs", "docs": "googledocs",
+    "gmail": "gmail", "email": "gmail",
+    "googlecalendar": "googlecalendar", "calendar": "googlecalendar",
+    "microsoftword": "microsoftword", "word": "microsoftword",
+    "microsoftexcel": "microsoftexcel", "excel": "microsoftexcel",
+    # 云
+    "aws": "amazonaws", "amazonaws": "amazonaws",
+    "gcp": "googlecloud", "googlecloud": "googlecloud",
+    "azure": "microsoftazure", "microsoftazure": "microsoftazure",
+    "cloudflare": "cloudflare", "vercel": "vercel",
+    # 数据库
+    "postgresql": "postgresql", "postgres": "postgresql",
+    "mysql": "mysql", "redis": "redis", "mongodb": "mongodb",
+    # 硬件
+    "nvidia": "nvidia", "amd": "amd", "intel": "intel",
+    "tpu": "google", "apple": "apple",
+}
+
 # Platform → Source badge dot 色 (for title beat)
 SOURCE_DOT_CLASS = {
     "github": "gh", "x": "x", "arxiv": "arxiv", "hf": "hf",
@@ -394,7 +435,8 @@ class Caption:
     text: str
 
 def split_caption_text(text: str, max_chars: int = 26) -> list[str]:
-    segs = re.split(r"([，。、])", text)
+    # 支持多种中文分隔符：，。、·；;，以及英文逗号/句号
+    segs = re.split(r"([，。、·；;,.])", text)
     chunks, cur = [], ""
     for s in segs:
         if not s: continue
@@ -404,27 +446,55 @@ def split_caption_text(text: str, max_chars: int = 26) -> list[str]:
             if cur: chunks.append(cur)
             cur = s
     if cur: chunks.append(cur)
-    return [c.strip("，。、 ") for c in chunks if c.strip("，。、 ")]
+    return [c.strip("，。、·；;, ") for c in chunks if c.strip("，。、·；;, ")]
 
 def plan_captions(item: NewsItem, scene_start: float, scene_dur: float,
                   audio_chars: list[tuple[str, float, float]]) -> list[Caption]:
+    """为一条新闻切字幕。
+    策略：① 先按字符数比例分配时间作 baseline；② 在 baseline 附近用 whisper 锚点精修；
+    ③ end 设到下一条 start；④ 只合并 < 0.6s 的短句到前一条（避免过度合并）。
+    """
     end = scene_start + scene_dur
     cap_segs = split_caption_text(item.blockquote, 26)
-    captions: list[Caption] = []
-    cursor = scene_start + 0.5
+    if not cap_segs:
+        return []
+
+    # ① 按字符数比例分配 baseline 时间（跳过引导 "第N条" 占 ~0.5s）
+    lead_in = 0.5
+    avail = max(scene_dur - lead_in - 0.2, 1.0)
+    total_chars = sum(len(s) for s in cap_segs) or 1
+    baseline: list[float] = []
+    t_acc = scene_start + lead_in
     for seg in cap_segs:
+        baseline.append(t_acc)
+        t_acc += len(seg) / total_chars * avail
+
+    # ② 用 whisper anchor 精修，偏离 baseline 超过 2s 则回退到 baseline
+    captions: list[Caption] = []
+    cursor = scene_start + lead_in
+    for i, seg in enumerate(cap_segs):
         anchor = _PUNC.sub("", seg[:8])
-        t = find_anchor_time(audio_chars, anchor, cursor) if anchor else None
-        if t is None:
-            t = cursor + 0.3
+        t_anchor = find_anchor_time(audio_chars, anchor, cursor) if anchor else None
+        t_base = baseline[i]
+        if t_anchor is None or abs(t_anchor - t_base) > 2.0:
+            t = t_base
+        else:
+            t = t_anchor
+        # 保证单调递增
+        if captions and t <= captions[-1].start + 0.1:
+            t = captions[-1].start + 0.1
         captions.append(Caption(start=t, end=t, text=seg))
-        cursor = t + 0.5
+        cursor = t + 0.3
+
+    # ③ end 设到下一条 start - 小 gap
     for i, c in enumerate(captions):
         nxt = captions[i+1].start if i+1 < len(captions) else end
-        c.end = nxt
+        c.end = max(c.start + 0.3, nxt - 0.02)
+
+    # ④ 只合并 < 0.6s 的（阻止把正常 1-3s 的字幕也合掉）
     merged: list[Caption] = []
     for c in captions:
-        if c.end - c.start < 1.5 and merged and (c.end - merged[-1].start) < 7:
+        if c.end - c.start < 0.6 and merged and (c.end - merged[-1].start) < 5:
             merged[-1].text = merged[-1].text + " · " + c.text
             merged[-1].end = c.end
         else:
@@ -514,7 +584,8 @@ def wrap_broll(inner: str, start: float, dur: float, track: int, tag_id: str = "
 def render_logo_hero(data: dict, item: NewsItem) -> tuple[str, str]:
     company = data.get("company", "")
     slug = COMPANY_LOGOS.get(company) or item.company_slug
-    svg = read_logo_svg(slug) if slug else ""
+    # HyperFrames 不可靠地继承 CSS fill 到 inline SVG，inline 写 fill 强制 #1D1D1F
+    svg = read_logo_svg(slug, inline_color="#1D1D1F") if slug else ""
     if svg:
         return f'<div class="b-logo">{svg}</div>', "fade-scale"
     # fallback: media image / number
@@ -566,7 +637,13 @@ def render_tools_cascade(data: dict) -> tuple[str, str]:
     for t in tools:
         slug = t.get("slug", "")
         label = t.get("label", slug)
-        svg = read_logo_svg(slug) if slug else ""
+        # slug 为空时，用 label 转常见别名试一次（agent 有时给空 slug）
+        if not slug:
+            slug = SLUG_ALIASES.get(label.lower().replace(" ", ""), "")
+        # 只下载，不检测失败情况下再 fallback
+        if slug:
+            fetch_logo(slug)  # 幂等，如已有缓存直接用
+        svg = read_logo_svg(slug, inline_color="#1D1D1F") if slug else ""
         if svg:
             icon = f'<div class="badge">{svg}</div>'
         else:
@@ -1281,7 +1358,10 @@ def build_html(episode: Episode, audio_info: dict, audio_chars: list,
     for i, c in enumerate(sorted_caps):
         nxt_start = sorted_caps[i+1].start if i+1 < len(sorted_caps) else float("inf")
         safe_end = min(c.end, nxt_start - 0.05)
-        dur = max(0.4, safe_end - c.start)
+        dur = safe_end - c.start
+        # 太短（< 0.3s）直接跳过，不强行拉长导致下一条被覆盖
+        if dur < 0.3:
+            continue
         parts.append(f'<div class="cap clip" data-start="{c.start:.2f}" '
                      f'data-duration="{dur:.2f}" data-track-index="200">'
                      f'{html_escape(c.text)}</div>')
